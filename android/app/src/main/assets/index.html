@@ -1,0 +1,1011 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#17734a"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon-192.png"><style>:root{color-scheme:light}body{margin:0;font-size:14px}</style></head><body><title>AT-Pen Mapping</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-height field tool. Status strip on top, map fills the middle, tabbed control sheet pinned to the bottom. */
+:root{
+  --bg:#f2f4f1; --surface:#ffffff; --ink:#15211b; --muted:#5b6a61; --line:#d3dad4;
+  --accent:#17734a; --accent-ink:#ffffff; --bunk:#d48a00; --alley:#2c6bb8; --bad:#b83227;
+  --map:#e9eee9; --grid:#d2dad3; --halo:#f2f4f1;
+  --r1:#2f8f5b; --r2:#3a74c2; --r3:#a55fb8; --r4:#c47a1c; --r5:#1d9aa6; --r6:#b8506a;
+  --f-display:"Barlow Condensed","Arial Narrow",sans-serif; --f-body:"Barlow",system-ui,sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1713; --surface:#18221c; --ink:#e6eee8; --muted:#93a59a; --line:#2b3a31;
+  --accent:#4cc088; --accent-ink:#06150d; --bunk:#f0a91a; --alley:#6aa4ee; --bad:#f06a5d;
+  --map:#121c16; --grid:#1f2d25; --halo:#0f1713;
+  --r1:#4cc088; --r2:#6aa4ee; --r3:#c88ad8; --r4:#e8a14a; --r5:#4cc4cf; --r6:#e8809a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1713; --surface:#18221c; --ink:#e6eee8; --muted:#93a59a; --line:#2b3a31;
+  --accent:#4cc088; --accent-ink:#06150d; --bunk:#f0a91a; --alley:#6aa4ee; --bad:#f06a5d;
+  --map:#121c16; --grid:#1f2d25; --halo:#0f1713;
+  --r1:#4cc088; --r2:#6aa4ee; --r3:#c88ad8; --r4:#e8a14a; --r5:#4cc4cf; --r6:#e8809a; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;overflow:hidden;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0}
+#app{height:100%;display:flex;flex-direction:column;gap:8px;padding-block:8px}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+h1{font:700 22px/1 var(--f-display);letter-spacing:.04em;text-transform:uppercase;margin:0}
+.fix{display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 100%;order:3}
+header .chip{margin-left:auto}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--muted);flex:none}
+.dot.good{background:var(--accent)} .dot.ok{background:var(--bunk)} .dot.bad{background:var(--bad)}
+#fixTxt{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;min-height:36px}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+#mapwrap{position:relative;flex:1 1 0;min-height:140px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--map)}
+canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block}
+.fab{position:absolute;right:8px;display:flex;flex-direction:column;gap:6px}
+.fab button{width:44px;height:44px;border-radius:6px;border:1px solid var(--line);background:var(--surface);font:700 12px var(--f-body);cursor:pointer}
+.fab button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+#legend{position:absolute;left:8px;top:8px;font-size:11px;background:color-mix(in srgb,var(--surface) 88%,transparent);border:1px solid var(--line);border-radius:4px;padding:4px 8px;line-height:1.5}
+#legend i{display:inline-block;width:18px;height:0;border-top:4px solid var(--bunk);vertical-align:middle;margin-right:6px}
+#legend b{display:inline-block;width:14px;height:10px;background:var(--r1);opacity:.4;border:1px solid var(--r1);vertical-align:middle;margin-right:6px}
+
+#sheet{flex:0 0 auto;max-height:46%;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:6px;min-height:0}
+[role=tablist]{display:flex;border-bottom:1px solid var(--line)}
+[role=tab]{flex:1;border:0;background:none;padding:12px 4px;font:600 12px var(--f-body);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;min-height:44px}
+[role=tab][aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.panel{padding:12px;overflow:auto;display:flex;flex-direction:column;gap:12px;min-height:0}
+.row{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+.field{display:flex;flex-direction:column;gap:4px;flex:1;min-width:84px}
+.field label,.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+input[type=text],input[type=number],select,textarea{background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:10px;min-height:44px;width:100%}
+textarea{font-family:var(--f-mono);font-size:11px;min-height:110px;resize:vertical}
+.btn{min-height:48px;padding:0 16px;border-radius:6px;border:1px solid var(--line);background:var(--bg);font-weight:600;cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font:700 20px var(--f-display);letter-spacing:.05em;text-transform:uppercase}
+.btn.big{flex:1;min-height:60px}
+.btn.warn{color:var(--bad);border-color:var(--bad)}
+.btn:disabled{opacity:.5}
+.note{font-size:12px;color:var(--muted);line-height:1.45;margin:0}
+.check{display:flex;gap:8px;align-items:center;font-size:14px}
+.check input{width:20px;height:20px}
+#prog{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+#prog i{display:block;height:100%;width:0;background:var(--accent)}
+.sum{font:500 12px var(--f-mono);color:var(--muted)}
+ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+li.pen{display:grid;grid-template-columns:10px 1fr auto auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer}
+li.pen[aria-current="true"]{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+li.pen .sw{width:10px;height:28px;border-radius:2px}
+li.pen .nm{font:700 17px var(--f-display);letter-spacing:.03em}
+li.pen .mt{font:400 11px var(--f-mono);color:var(--muted)}
+li.pen button{border:1px solid var(--line);background:var(--bg);border-radius:5px;min-height:36px;min-width:36px;cursor:pointer}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 12px);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:6px;font-size:13px;max-width:90%;z-index:20}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.mapbar{align-items:center;flex-wrap:nowrap;gap:8px}
+.mapbar select,.mapbar input{min-height:40px;flex:1;min-width:0;padding:6px 10px}
+.chip.go{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.com{display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.com span{flex:1;min-width:0;overflow-wrap:anywhere;font-size:14px}
+.com.on span{font-weight:700;color:var(--accent)}
+.com button{min-height:40px;padding:0 12px;border-radius:6px;border:1px solid var(--line);background:var(--bg);font-weight:600;cursor:pointer}
+</style>
+
+<div id="app">
+  <header>
+    <h1>AT-Pen Mapping</h1>
+    <div class="fix"><span class="dot" id="dot"></span><span id="fixTxt" class="mono">Waiting for GPS</span></div>
+    <button class="chip" id="simBtn" aria-pressed="false">Simulate GPS</button>
+  </header>
+  <div class="row mapbar" id="mapbar"><select id="mapSel" aria-label="Current map"></select><button class="chip go" id="newMapBtn">+ New map</button></div>
+  <div class="row mapbar" id="newBar" hidden><input type="text" id="newName" placeholder="Map name, e.g. North yard" aria-label="New map name" autocomplete="off"><button class="chip go" id="newCreate">Create</button><button class="chip" id="newCancel">Cancel</button></div>
+
+  <div id="mapwrap">
+    <canvas id="cv" aria-label="Pen map"></canvas>
+    <div id="legend"><i></i>Feed bunk<br><b></b>Pen perimeter</div>
+    <div class="fab">
+      <button id="fitBtn" title="Fit all">Fit</button>
+      <button id="satBtn" aria-pressed="true" title="Satellite imagery">Sat</button>
+      <button id="followBtn" aria-pressed="false" title="Follow me">Me</button>
+    </div>
+  </div>
+
+  <section id="sheet">
+    <div role="tablist" aria-label="Controls">
+      <button role="tab" id="t-cap" aria-selected="true" aria-controls="p-cap">Capture</button>
+      <button role="tab" id="t-pens" aria-selected="false" aria-controls="p-pens">Pens</button>
+      <button role="tab" id="t-file" aria-selected="false" aria-controls="p-file">Map file</button>
+      <button role="tab" id="t-gps" aria-selected="false" aria-controls="p-gps">GPS</button>
+    </div>
+
+    <div class="panel" id="p-cap" role="tabpanel" aria-labelledby="t-cap">
+      <div class="row">
+        <div class="field"><label for="penId">Pen ID</label><input type="text" id="penId" autocomplete="off" autocapitalize="characters" placeholder="Enter pen number" inputmode="text"></div>
+        <div class="field"><label for="avg">Average fix for</label>
+          <select id="avg"><option value="2">2 s</option><option value="5" selected>5 s</option><option value="10">10 s</option><option value="20">20 s</option></select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="numDir">Direction</label><select id="numDir"><option value="up">Count up</option><option value="down">Count down</option></select></div>
+        <div class="field"><label for="numStep">Numbering</label><select id="numStep"><option value="1">By 1 (1, 2, 3)</option><option value="even">Even only (2, 4, 6)</option><option value="odd">Odd only (1, 3, 5)</option><option value="none">No counting (same number)</option><option value="manual">Type each number</option></select></div>
+      </div>
+      <div class="row">
+        <button class="btn primary big" id="markBtn">Start pen</button>
+        <button class="btn" id="cancelBtn" hidden>Cancel</button>
+      </div>
+      <div class="sum" id="seqHint"></div>
+      <div id="prog" hidden><i></i></div>
+      <label class="check"><input type="checkbox" id="chain" checked> <span id="chainTxt">Chain: next pen starts where this one ends</span></label>
+      <p class="note" id="capNote">Stand at the start of the feed bunk and tap Start pen. Walk along the bunk and tap End pen at the far end. Pens that touch within the link distance join into one side of an alley.</p>
+    </div>
+
+    <div class="panel" id="p-pens" role="tabpanel" aria-labelledby="t-pens" hidden>
+      <div class="sum" id="sum"></div>
+      <div class="grid2">
+        <div class="field"><label for="sTol" id="lTol">Link distance (ft)</label><input type="number" id="sTol" step="any" min="0" inputmode="decimal"></div>
+        <div class="field"><label for="sAlley" id="lAlley">Max alley width (ft)</label><input type="number" id="sAlley" step="any" min="0" inputmode="decimal"></div>
+        <div class="field"><label for="sDepth" id="lDepth">Default pen depth (ft)</label><input type="number" id="sDepth" step="any" min="0" inputmode="decimal"></div>
+        <div class="field"><label for="sSide">Unpaired pens extend</label><select id="sSide"><option value="left">Left of travel</option><option value="right">Right of travel</option></select></div>
+        <div class="field"><label for="sUnits">Units</label><select id="sUnits"><option value="imp">Imperial (feet)</option><option value="met">Metric (meters)</option></select></div>
+      </div>
+      <p class="note">Rows facing each other across an alley are detected automatically. Pens extend away from the alley, to half the distance to the next row behind them, or the default depth if none is found.</p>
+      <div class="row"><button class="btn" id="recalc">Recalculate all perimeters</button></div>
+      <ul id="penList"></ul>
+    </div>
+
+    <div class="panel" id="p-file" role="tabpanel" aria-labelledby="t-file" hidden>
+      <div class="field"><label for="mapName">This map</label><input type="text" id="mapName" autocomplete="off"></div>
+      <div class="grid2">
+        <div class="field"><label for="mYard">Feedyard name</label><input type="text" id="mYard" autocomplete="off" placeholder="e.g. FI2"></div>
+        <div class="field"><label for="mLoc">Feedyard location</label><input type="text" id="mLoc" autocomplete="off" placeholder="e.g. KS"></div>
+        <div class="field"><label for="mBy">Mapped by</label><input type="text" id="mBy" autocomplete="off" placeholder="initials"></div>
+        <div class="field"><label for="mOn">Mapped on</label><input type="text" id="mOn" autocomplete="off" placeholder="MM/DD/YY"></div>
+      </div>
+      <div class="row">
+        <button class="btn" id="dupMap">Duplicate map</button>
+        <button class="btn warn" id="delMap">Delete map</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="expMap">Save map file (.TXT)</button>
+        <button class="btn" id="expKml">Save KML (Google Earth)</button>
+        <button class="btn" id="expGeo">Save GeoJSON</button>
+        <button class="btn" id="copyMap">Copy text</button>
+      </div>
+      <div class="field"><label for="mapText">Map file text</label><textarea id="mapText" spellcheck="false"></textarea></div>
+      <div class="row">
+        <button class="btn" id="loadText">Load from text</button>
+        <label class="btn" style="display:inline-flex;align-items:center">Open file as new map<input type="file" id="fileIn" accept=".map,.txt,.csv,text/plain" hidden></label>
+        <button class="btn" id="example">Load example</button>
+        <button class="btn warn" id="clearAll">Clear all</button>
+      </div>
+      <p class="note">Saved as <span class="mono">YARD_MAP.TXT</span>. Each pen line is <span class="mono">PEN,id</span> then four corners (bunk start, bunk end, back of end, back of start) as latitude, longitude, altitude. Files with only the two bunk points also open, and the back corners are worked out for you.</p>
+    </div>
+
+    <div class="panel" id="p-gps" role="tabpanel" aria-labelledby="t-gps" hidden>
+      <div class="field"><label for="gpsSrc">Position source</label>
+        <select id="gpsSrc"><option value="bt">Bluetooth receiver (paired)</option><option value="ext">USB or COM port receiver</option><option value="dev">This device's own location</option></select></div>
+      <label class="check" id="gpsAutoRow"><input type="checkbox" id="gpsAuto" checked> Search or connect automatically</label>
+      <div id="btBox" hidden style="display:flex;flex-direction:column;gap:12px">
+        <p class="note">Pair the receiver (for example the TOPGNSS TOP608BT) in Android Bluetooth settings first. The PIN is usually 0000 or 1234. Then pick it below.</p>
+        <div id="btList" class="note">Loading…</div>
+        <div class="row">
+          <button class="btn" id="btRefresh">Refresh list</button>
+          <button class="btn" id="btSettings">Bluetooth settings</button>
+          <button class="btn" id="btOff">Disconnect</button>
+        </div>
+      </div>
+      <div id="gpsExtBox" style="display:flex;flex-direction:column;gap:12px">
+        <div class="field"><label for="gpsBaud">Baud rate</label>
+          <select id="gpsBaud"><option value="0">Auto-detect</option><option value="4800">4800</option><option value="9600">9600</option><option value="19200">19200</option><option value="38400">38400</option><option value="57600">57600</option><option value="115200">115200</option></select></div>
+        <div id="comBox" hidden>
+          <div class="lbl">Serial ports on this computer (names as in Device Manager)</div>
+          <div id="comList" class="note">Loading…</div>
+          <div class="row" style="margin-top:8px">
+            <div class="field"><label for="comType">Or type a port</label><input type="text" id="comType" placeholder="COM5" autocomplete="off" autocapitalize="characters"></div>
+            <button class="btn" id="comUse">Connect</button>
+            <button class="btn" id="comRefresh">Refresh list</button>
+          </div>
+        </div>
+        <div class="row">
+          <button class="btn" id="gpsScan">Scan for receiver</button>
+          <button class="btn" id="gpsPick">Choose port…</button>
+          <button class="btn" id="gpsOff">Disconnect</button>
+        </div>
+      </div>
+      <div class="sum" id="gpsStat">Not started</div>
+      <div class="sum" id="gpsLog" style="white-space:pre-wrap;max-height:120px;overflow:auto"></div>
+      <p class="note" id="gpsNote">The app looks for a receiver that sends NMEA sentences (GGA, RMC) on a serial port. It tries each port at the common baud rates and connects to the first one that answers. Accuracy comes from the receiver itself, so an RTK receiver shows centimeter readings.</p>
+    </div>
+  </section>
+</div>
+<div id="toast" hidden></div>
+
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s);
+let units="imp";try{const u=localStorage.getItem("penwalker.units");if(u==="met"||u==="imp")units=u;}catch(e){}
+const FT=3.280839895;
+const isImp=()=>units==="imp";
+const uLen=m=>isImp()?m*FT:m;
+const uAbbr=()=>isImp()?"ft":"m";
+const fLen=(m,dec)=>{const v=uLen(m);if(dec==null)dec=v<10?1:0;return v.toFixed(dec)+" "+uAbbr();};
+const fAcc=m=>{const v=uLen(m);return "±"+v.toFixed(v<1?2:1)+" "+uAbbr();};
+function lenLabel(m){if(!isImp())return (+m.toFixed(2))+" m";const ft=Math.round(m/0.3048);return ft>=5280?(+(ft/5280).toFixed(2))+" mi":ft+" ft";}
+const R=6371008.8, D2R=Math.PI/180, MPD=R*D2R, LS="penwalker.v1";
+const SIM_ORIGIN={lat:40.0,lon:-101.0,alt:900};
+let state={origin:null,pens:[],nextId:"1",settings:{tol:1.8288,alley:39.624,depth:60.96,side:"left"}};
+let D={L:[],rows:[],alleys:0};
+let fix=null, sim=false, simLoc={x:0,y:0}, watchId=null, pending=null, collecting=null, sel=-1, follow=false;
+const view={cx:0,cy:0,s:2};
+const cv=$("#cv"), ctx=cv.getContext("2d");
+let W=0,H=0,dpr=1;
+
+/* ---------- storage ---------- */
+const LS2="penwalker.v2";
+let store={cur:null,maps:{}};
+const uid=()=>"m"+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+let lastBy="";try{lastBy=localStorage.getItem("penwalker.by")||"";}catch(e){}
+const todayStr=()=>{const d=new Date(),z=n=>String(n).padStart(2,"0");return z(d.getMonth()+1)+"/"+z(d.getDate())+"/"+z(d.getFullYear()%100);};
+const blank=()=>({origin:null,pens:[],nextId:"1",settings:{tol:1.8288,alley:39.624,depth:60.96,side:"left"},meta:{yard:"",loc:"",by:lastBy,on:todayStr()}});
+function fixSettings(st){const x=st.settings;if(x.tol===2&&x.alley===40&&x.depth===60){x.tol=1.8288;x.alley=39.624;x.depth=60.96;}if(!x.sideTouched)x.side="left";}
+function save(){try{if(store.cur&&store.maps[store.cur])store.maps[store.cur].state=state;localStorage.setItem(LS2,JSON.stringify(store));}catch(e){}}
+function restore(){
+  try{
+    const t=localStorage.getItem(LS2);
+    if(t){const o=JSON.parse(t);if(o&&o.maps&&Object.keys(o.maps).length)store=o;}
+    else{const v1=localStorage.getItem(LS);if(v1){const o=JSON.parse(v1);if(o&&Array.isArray(o.pens)){const id=uid();store={cur:id,maps:{[id]:{name:"Map 1",state:o}}};}}}
+  }catch(e){}
+  if(!store.cur||!store.maps[store.cur]){const k=Object.keys(store.maps)[0];store.cur=k||null;}
+  if(store.cur){state=Object.assign(blank(),store.maps[store.cur].state);state.settings=Object.assign(blank().settings,state.settings||{});fixSettings(state);state.meta=Object.assign(blank().meta,state.meta||{});}
+  return !!store.cur;
+}
+
+/* ---------- geometry ---------- */
+const O=()=>state.origin||SIM_ORIGIN;
+function loc(p){const o=O();return{x:(p.lon-o.lon)*MPD*Math.cos(o.lat*D2R),y:(p.lat-o.lat)*MPD};}
+function geo(x,y){const o=O();return{lat:o.lat+y/MPD,lon:o.lon+x/(MPD*Math.cos(o.lat*D2R))};}
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+
+/* ---------- build: link pens into rows, pair rows into alleys, derive perimeters ---------- */
+function build(){
+  const S=state.settings;
+  const L=state.pens.map((p,i)=>({p,i,b:loc(p.b),e:loc(p.e),prev:null,next:null,row:-1,d:null}));
+  for(const a of L){let best=null,bd=S.tol;for(const c of L){if(c===a||c.prev)continue;const d=dist(a.e,c.b);if(d<bd){bd=d;best=c;}}if(best){a.next=best;best.prev=a;}}
+  const rows=[],seen=new Set();
+  const walk=s=>{const r={pens:[],side:null};let c=s;while(c&&!seen.has(c)){seen.add(c);c.row=rows.length;r.pens.push(c);c=c.next;}rows.push(r);};
+  L.filter(q=>!q.prev).forEach(walk);L.forEach(q=>{if(!seen.has(q))walk(q);});
+  function ray(P,d,skip,maxT){let best={t:Infinity,row:-1};for(const q of L){if(q.row===skip)continue;const sx=q.e.x-q.b.x,sy=q.e.y-q.b.y;const den=d.x*sy-d.y*sx;if(Math.abs(den)<1e-9)continue;const qx=q.b.x-P.x,qy=q.b.y-P.y;const t=(qx*sy-qy*sx)/den,u=(qx*d.y-qy*d.x)/den;if(t>0.01&&t<=maxT&&u>=0&&u<=1&&t<best.t)best={t,row:q.row};}return best;}
+  const pairs=new Set();
+  for(const r of rows){
+    let vote=0;
+    for(const q of r.pens){
+      const len=dist(q.b,q.e);if(len<0.5){q.bad=true;continue;}
+      q.dir={x:(q.e.x-q.b.x)/len,y:(q.e.y-q.b.y)/len};q.len=len;
+      q.ln={x:-q.dir.y,y:q.dir.x};
+      const mid={x:(q.b.x+q.e.x)/2,y:(q.b.y+q.e.y)/2};
+      const hl=ray(mid,q.ln,q.row,S.alley),hr=ray(mid,{x:-q.ln.x,y:-q.ln.y},q.row,S.alley);
+      if(hl.t<Infinity||hr.t<Infinity){const left=hl.t<hr.t;vote+=left?1:-1;pairs.add([q.row,(left?hl:hr).row].sort((a,b)=>a-b).join("-"));}
+    }
+    const alleySide=vote>0?"left":vote<0?"right":(S.side==="right"?"left":"right");
+    r.side=alleySide==="left"?"right":"left"; // side pens extend toward
+    r.found=vote!==0;
+    const raws=[];
+    for(const q of r.pens){
+      if(q.bad)continue;
+      const sg=r.side==="left"?1:-1;
+      q.pn={x:q.ln.x*sg,y:q.ln.y*sg};
+      const hb=ray(q.b,q.pn,q.row,2.5*S.depth).t,he=ray(q.e,q.pn,q.row,2.5*S.depth).t;
+      q.rb=hb<Infinity?hb/2:null;q.re=he<Infinity?he/2:null;
+      if(q.rb!=null)raws.push(q.rb);if(q.re!=null)raws.push(q.re);
+    }
+    raws.sort((a,b)=>a-b);
+    const med=raws.length?raws[Math.floor(raws.length/2)]:S.depth;
+    for(const q of r.pens){
+      if(q.bad)continue;
+      const dB=q.rb??med,dE=q.re??med;
+      q.d={dB,dE,poly:[q.b,q.e,{x:q.e.x+q.pn.x*dE,y:q.e.y+q.pn.y*dE},{x:q.b.x+q.pn.x*dB,y:q.b.y+q.pn.y*dB}]};
+      if(q.p.corners){const c1=loc(q.p.corners[0]),c2=loc(q.p.corners[1]);q.d={dB:dist(q.b,c2),dE:dist(q.e,c1),poly:[q.b,q.e,c1,c2]};q.fromFile=true;}
+    }
+  }
+  D={L,rows,alleys:pairs.size};
+}
+
+/* ---------- map file ---------- */
+const fmtLat=v=>Math.abs(v).toFixed(7)+(v<0?"S":"N");
+const fmtLon=v=>Math.abs(v).toFixed(7)+(v<0?"W":"E");
+const fmtAlt=v=>(v==null?0.1:v).toFixed(1);
+function toText(){
+  const m=state.meta||{};
+  const bar="/".repeat(72);
+  const out=[bar,"// Feedyard Name: "+(m.yard||curName()),"// Feedyard Location: "+(m.loc||""),"// Mapped By: "+(m.by||""),"// Mapped On: "+(m.on||""),bar,""];
+  D.L.forEach((q,i)=>{
+    const p=state.pens[i];if(!p)return;
+    let c1,c2;
+    if(p.corners){c1=p.corners[0];c2=p.corners[1];}
+    else if(q.d){const a=geo(q.d.poly[2].x,q.d.poly[2].y),b=geo(q.d.poly[3].x,q.d.poly[3].y);c1={lat:a.lat,lon:a.lon};c2={lat:b.lat,lon:b.lon};}
+    else{c1=p.e;c2=p.b;}
+    const alt=fmtAlt(p.b.alt);
+    out.push(["PEN",p.id,fmtLat(p.b.lat),fmtLon(p.b.lon),alt,fmtLat(p.e.lat),fmtLon(p.e.lon),alt,fmtLat(c1.lat),fmtLon(c1.lon),alt,fmtLat(c2.lat),fmtLon(c2.lon),alt].join(","));
+  });
+  return out.join("\n")+"\n";
+}
+function val(f){const s=String(f).trim();const m=s.match(/[NSEWnsew]$/);let v=parseFloat(s);if(isNaN(v))return NaN;if(m&&/[SsWw]/.test(m[0]))v=-Math.abs(v);return v;}
+function parseText(t){
+  const res={origin:null,pens:[],bad:0,meta:{}};
+  for(let line of t.split(/\r?\n/)){
+    line=line.trim();if(!line)continue;
+    if(line[0]==="/"){
+      const m=line.match(/^\/+\s*(Feedyard Name|Feedyard Location|Mapped By|Mapped On)\s*:\s*(.*)$/i);
+      if(m){const k=m[1].toLowerCase();res.meta[k.includes("name")?"yard":k.includes("location")?"loc":k.includes(" by")?"by":"on"]=m[2].trim();}
+      continue;
+    }
+    const f=line.split(",").map(x=>x.trim());const k=f[0].toUpperCase();
+    if(k==="ORIGIN"){const a=val(f[1]),b=val(f[2]),c=parseFloat(f[3]);if(a&&b&&c&&!res.origin)res.origin={lat:a,lon:b,alt:c};else if(!(a&&b&&c))res.bad++;}
+    else if(k==="PEN"){
+      const v=[val(f[2]),val(f[3]),parseFloat(f[4]),val(f[5]),val(f[6]),parseFloat(f[7])];
+      if(f[1]&&v.every(x=>x&&!isNaN(x))){
+        const pen={id:f[1],b:{lat:v[0],lon:v[1],alt:v[2]},e:{lat:v[3],lon:v[4],alt:v[5]}};
+        if(f.length>=14){const c=[val(f[8]),val(f[9]),parseFloat(f[10]),val(f[11]),val(f[12]),parseFloat(f[13])];
+          if(c.every(x=>x&&!isNaN(x)))pen.corners=[{lat:c[0],lon:c[1],alt:c[2]},{lat:c[3],lon:c[4],alt:c[5]}];}
+        res.pens.push(pen);
+      }else res.bad++;
+    }
+  }
+  return res;
+}
+function applyParsed(r){state.example=false;
+  if(!r.pens.length&&!r.origin){toast("No ORIGIN or PEN records found");return false;}
+  state.origin=r.origin||(r.pens[0]?{lat:r.pens[0].b.lat,lon:r.pens[0].b.lon,alt:r.pens[0].b.alt}:null);
+  state.pens=r.pens;state.meta=Object.assign(blank().meta,r.meta);state.nextId=nextId(r.pens.length?r.pens[r.pens.length-1].id:"0");
+  pending=null;sel=-1;refresh();syncUI();fitAll();
+  toast("Loaded "+r.pens.length+" pens"+(r.bad?" · "+r.bad+" bad lines skipped":""));return true;
+}
+function geojson(){
+  const feats=[];
+  for(const q of D.L){
+    feats.push({type:"Feature",properties:{id:q.p.id,kind:"bunk",row:q.row+1},geometry:{type:"LineString",coordinates:[[q.p.b.lon,q.p.b.lat],[q.p.e.lon,q.p.e.lat]]}});
+    if(q.d){const ring=q.d.poly.map(pt=>{const g=geo(pt.x,pt.y);return[g.lon,g.lat];});ring.push(ring[0]);
+      feats.push({type:"Feature",properties:{id:q.p.id,kind:"perimeter",row:q.row+1,depthBegin:+q.d.dB.toFixed(1),depthEnd:+q.d.dE.toFixed(1)},geometry:{type:"Polygon",coordinates:[ring]}});}
+  }
+  return JSON.stringify({type:"FeatureCollection",features:feats},null,1);
+}
+
+/* ---------- helpers: files, toast ---------- */
+let tt=null;
+function toast(m){const t=$("#toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2800);}
+async function saveFile(name,text,mime){
+  try{if(window.AndroidBridge&&AndroidBridge.saveFile){const r=AndroidBridge.saveFile(name,text,mime);toast(r||"Saved");return;}}catch(e){}
+  try{const dl=window.claude&&await window.claude.use("downloads");if(dl){await dl.save({filename:name,data:text});return;}}catch(e){if(e&&e.code!==undefined&&String(e.code).includes("declin"))return;}
+  try{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:mime}));a.download=name;document.body.appendChild(a);a.click();a.remove();toast("Saving "+name);}
+  catch(e){toast("Save blocked here. Use Copy text instead.");}
+}
+async function copy(text){try{await navigator.clipboard.writeText(text);toast("Copied");}catch(e){const t=$("#mapText");t.focus();t.select();toast("Select and copy the text");}}
+
+/* ---------- GPS ---------- */
+function curPos(){
+  if(sim){const g=geo(simLoc.x,simLoc.y);return{lat:g.lat,lon:g.lon,alt:O().alt,acc:1};}
+  if(fix&&fix.src==="ext"&&Date.now()-fix.t>8000)return null;
+  return fix;
+}
+function startGPS(){
+  if(watchId!=null)return;
+  if(!("geolocation" in navigator)){setFix("bad","GPS not available. Use Simulate GPS.");return;}
+  try{
+    watchId=navigator.geolocation.watchPosition(p=>{
+      gotFix({lat:p.coords.latitude,lon:p.coords.longitude,alt:p.coords.altitude,acc:p.coords.accuracy,t:p.timestamp});
+    },e=>{
+      let msg;
+      const framed=(()=>{try{return window.top!==window;}catch(x){return true;}})();
+      if(e.code===1){
+        if(framed)msg="Location is blocked inside this preview page, whatever you allow. Use the installed app or the HTTPS copy instead.";
+        else if(!window.isSecureContext)msg="Location needs HTTPS. Install the Android app or host the web app on an https:// address.";
+        else msg="Location denied. In the browser's site settings for this page, set Location to Allow, then reload.";
+      }else if(e.code===2)msg=window.DesktopApp?"This computer has no GPS. Use Simulate GPS, or open map files captured on the phone (Map file tab).":"No GPS signal yet. Move outdoors with a clear sky view.";
+      else if(e.code===3)msg="GPS timed out. Retrying…";
+      else msg="No GPS fix ("+e.message+")";
+      setFix("bad",msg);
+      if(e.code===3){navigator.geolocation.clearWatch(watchId);setTimeout(startGPS,1500);}
+    },{enableHighAccuracy:true,maximumAge:0,timeout:20000});
+  }catch(e){setFix("bad","GPS unavailable");}
+  try{navigator.wakeLock&&navigator.wakeLock.request("screen").catch(()=>{});}catch(e){}
+}
+function setFix(cls,txt){$("#dot").className="dot "+cls;$("#fixTxt").textContent=txt;}
+function onPos(){
+  const p=curPos();if(!p){return;}
+  const cls=p.acc<=5?"good":p.acc<=15?"ok":"bad";
+  setFix(cls,(sim?"SIM ":(p.src==="ext"?"EXT "+(p.qn||"")+" "+(p.sats!=null?p.sats+"sv ":""):"")+fAcc(p.acc)+"  ")+p.lat.toFixed(6)+", "+p.lon.toFixed(6)+(p.alt!=null?"  "+fLen(p.alt,0):""));
+  if(follow){const l=loc(p);view.cx=l.x;view.cy=l.y;}
+  draw();
+}
+
+/* ---------- capture ---------- */
+function nextId(id,dir){
+  dir=dir||(state.settings.dir==="down"?-1:1);
+  const mode=state.settings.step||"1";
+  if(mode==="manual")return "";
+  if(mode==="none")return String(id);
+  const m=String(id).match(/^(.*?)(\d+)$/);if(!m)return id+"1";
+  let n=+m[2];
+  if(mode==="even"||mode==="odd"){const par=mode==="even"?0:1;n+=dir;if(((n%2)+2)%2!==par)n+=dir;n=Math.max(par,n);}
+  else n=Math.max(0,n+dir);
+  return m[1]+String(n).padStart(m[2].length,"0");
+}
+function seqHint(){
+  const mode=state.settings.step||"1",el=$("#seqHint");if(!el)return;
+  if(mode==="manual"){el.textContent="Type each pen number. Each pen needs its own start and end point.";return;}
+  if(mode==="none"){el.textContent="The pen number stays the same until you change it. Each pen needs its own start and end point.";return;}
+  let id=$("#penId").value.trim()||state.nextId;if(!id){el.textContent="";return;}
+  const a=[id];for(let k=0;k<3;k++){id=nextId(id);a.push(id);}
+  el.textContent="Sequence: "+a.join(", ")+" …";
+}
+function uiCapture(){
+  const b=$("#markBtn");
+  b.textContent=collecting?"Averaging…":pending?"End pen "+pending.id:"Start pen";
+  b.disabled=!!collecting;
+  $("#cancelBtn").hidden=!pending||!!collecting;
+  if(pending)$("#penId").value=pending.id;
+  $("#penId").disabled=!!collecting;
+  seqHint();
+}
+function mark(){
+  const p=curPos();if(!p){toast("No position yet");return;}
+  if(state.example){state.example=false;if(!sim){state.pens=[];state.origin=null;refresh();}}
+  if(!state.origin)state.origin={lat:p.lat,lon:p.lon,alt:p.alt??0.1};
+  const id=$("#penId").value.trim()||state.nextId;
+  if(!id){toast("Enter the pen number first");$("#penId").focus();return;}
+  if(pending)pending.id=id;
+  const n=Math.max(1,+$("#avg").value);
+  collecting={id,kind:pending?"end":"begin",s:[],until:Date.now()+n*1000,total:n*1000};
+  $("#prog").hidden=false;uiCapture();
+  const iv=setInterval(()=>{
+    const c=curPos();if(c)collecting.s.push(c);
+    const left=collecting.until-Date.now();
+    $("#prog i").style.width=Math.min(100,100*(1-left/collecting.total))+"%";
+    if(left<=0){clearInterval(iv);finishMark();}
+  },200);
+}
+function finishMark(){
+  const s=collecting.s;const m=k=>s.reduce((a,x)=>a+(x[k]||0),0)/s.length;
+  const pt={lat:m("lat"),lon:m("lon"),alt:s.some(x=>x.alt!=null)?m("alt"):0.1};
+  const c=collecting;collecting=null;$("#prog").hidden=true;
+  if(c.kind==="begin"){pending={id:c.id,b:pt};toast("Start of "+c.id+" marked ("+s.length+" fixes)");}
+  else{
+    const dup=state.pens.some(q=>q.id===c.id);
+    state.pens.push({id:c.id,b:pending.b,e:pt});
+    const nid=nextId(c.id);state.nextId=nid;
+    if($("#chain").checked){pending={id:nid,b:pt};}else{pending=null;$("#penId").value=nid;}
+    if(!nid)setTimeout(()=>$("#penId").focus(),50);
+    toast("Pen "+c.id+" saved ("+fLen(dist(loc(state.pens[state.pens.length-1].b),loc(pt)),1)+")"+(dup?". That number was already used.":""));
+    refresh();
+  }
+  uiCapture();draw();save();
+}
+
+/* ---------- UI lists ---------- */
+function refresh(){build();save();syncMapSel();renderPens();$("#mapText").value=toText();draw();}
+function renderPens(){
+  const n=D.L.length;
+  $("#sum").textContent=n+" pens · "+D.rows.length+" rows · "+D.alleys+" alleys";
+  const ul=$("#penList");ul.innerHTML="";
+  if(!n){const li=document.createElement("li");li.className="note";li.textContent="No pens yet. Capture a pen, or load the example from the Map file tab.";ul.appendChild(li);return;}
+  D.L.forEach((q,i)=>{
+    const li=document.createElement("li");li.className="pen";if(i===sel)li.setAttribute("aria-current","true");
+    const sw=document.createElement("span");sw.className="sw";sw.style.background="var(--r"+(q.row%6+1)+")";
+    const mid=document.createElement("div");
+    const nm=document.createElement("div");nm.className="nm";nm.textContent="Pen "+q.p.id;
+    const mt=document.createElement("div");mt.className="mt";
+    mt.textContent="row "+(q.row+1)+" · bunk "+fLen(q.len??dist(q.b,q.e),1)+(q.d?" · depth "+fLen((q.d.dB+q.d.dE)/2,0):"");
+    mid.append(nm,mt);
+    const z=document.createElement("button");z.textContent="Go";z.setAttribute("aria-label","Show pen "+q.p.id);
+    const x=document.createElement("button");x.textContent="✕";x.setAttribute("aria-label","Delete pen "+q.p.id);
+    li.append(sw,mid,z,x);
+    li.addEventListener("click",()=>{sel=i;zoomTo(q);renderPens();draw();});
+    x.addEventListener("click",e=>{e.stopPropagation();state.pens.splice(i,1);sel=-1;refresh();});
+    ul.appendChild(li);
+  });
+}
+function zoomTo(q){const pts=q.d?q.d.poly:[q.b,q.e];fitPts(pts);}
+
+/* ---------- map ---------- */
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const w2s=(x,y)=>[(x-view.cx)*view.s+W/2,H/2-(y-view.cy)*view.s];
+const s2w=(px,py)=>({x:(px-W/2)/view.s+view.cx,y:(H/2-py)/view.s+view.cy});
+function resize(){const r=cv.getBoundingClientRect();dpr=window.devicePixelRatio||1;W=r.width;H=r.height;cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);draw();}
+function fitPts(pts){
+  if(!pts.length)return;let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for(const p of pts){x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);}
+  const w=Math.max(x1-x0,30),h=Math.max(y1-y0,30);
+  view.cx=(x0+x1)/2;view.cy=(y0+y1)/2;view.s=Math.min(60,Math.max(.05,Math.min(W/(w*1.2),H/(h*1.2))||1));draw();
+}
+function fitAll(){
+  const pts=[];for(const q of D.L){pts.push(q.b,q.e);if(q.d)pts.push(...q.d.poly);}
+  const p=curPos();if(p&&!pts.length)pts.push(loc(p));
+  if(!pts.length)pts.push({x:-30,y:-30},{x:30,y:30});
+  fitPts(pts);
+}
+function draw(){
+  if(!W||!H||!(view.s>0))return;
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+  ctx.fillStyle=css("--map");ctx.fillRect(0,0,W,H);
+  const satShown=drawSat();
+  // grid
+  const steps=isImp()?[1,2,5,10,20,50,100,200,500,1000,2000,5280,10560,26400,52800].map(x=>x*0.3048):[1,2,5,10,20,50,100,200,500,1000,2000,5000,10000,20000,50000];let step=steps.find(s=>s*view.s>=60)||steps[steps.length-1];
+  const a=s2w(0,H),b=s2w(W,0);ctx.lineWidth=1;ctx.strokeStyle=satShown?"rgba(255,255,255,.22)":css("--grid");ctx.beginPath();
+  for(let x=Math.ceil(a.x/step)*step;x<=b.x;x+=step){const[px]=w2s(x,0);ctx.moveTo(Math.round(px)+.5,0);ctx.lineTo(Math.round(px)+.5,H);}
+  for(let y=Math.ceil(a.y/step)*step;y<=b.y;y+=step){const[,py]=w2s(0,y);ctx.moveTo(0,Math.round(py)+.5);ctx.lineTo(W,Math.round(py)+.5);}
+  ctx.stroke();
+  const ink=css("--ink"),halo=css("--halo"),bunk=css("--bunk");
+  // perimeters
+  for(const q of D.L){
+    if(!q.d)continue;const col=css("--r"+(q.row%6+1));
+    ctx.beginPath();q.d.poly.forEach((p,i)=>{const[px,py]=w2s(p.x,p.y);i?ctx.lineTo(px,py):ctx.moveTo(px,py);});ctx.closePath();
+    ctx.globalAlpha=D.L.indexOf(q)===sel?.45:.2;ctx.fillStyle=col;ctx.fill();ctx.globalAlpha=1;
+    ctx.strokeStyle=col;ctx.lineWidth=D.L.indexOf(q)===sel?3:1.5;ctx.stroke();
+  }
+  // bunks
+  ctx.lineCap="round";
+  for(const q of D.L){
+    const[x0,y0]=w2s(q.b.x,q.b.y),[x1,y1]=w2s(q.e.x,q.e.y);
+    ctx.strokeStyle=bunk;ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();
+    const ang=Math.atan2(y1-y0,x1-x0);ctx.fillStyle=ink;ctx.beginPath();ctx.moveTo(x1,y1);
+    ctx.lineTo(x1-9*Math.cos(ang-.45),y1-9*Math.sin(ang-.45));ctx.lineTo(x1-9*Math.cos(ang+.45),y1-9*Math.sin(ang+.45));ctx.closePath();ctx.fill();
+    if(Math.hypot(x1-x0,y1-y0)>26){
+      const mx=(x0+x1)/2,my=(y0+y1)/2;let nx=0,ny=0;if(q.pn){nx=q.pn.x;ny=-q.pn.y;}
+      const lx=mx+nx*14,ly=my+ny*14;ctx.font="700 13px "+getComputedStyle(document.body).fontFamily;ctx.textAlign="center";ctx.textBaseline="middle";
+      ctx.lineWidth=3;ctx.strokeStyle=halo;ctx.strokeText(q.p.id,lx,ly);ctx.fillStyle=ink;ctx.fillText(q.p.id,lx,ly);
+    }
+  }
+  // pending
+  const p=curPos();
+  if(pending){
+    const l=loc(pending.b),[px,py]=w2s(l.x,l.y);
+    ctx.fillStyle=bunk;ctx.beginPath();ctx.arc(px,py,7,0,6.3);ctx.fill();ctx.strokeStyle=ink;ctx.lineWidth=2;ctx.stroke();
+    if(p){const c=loc(p),[cx,cy]=w2s(c.x,c.y);ctx.setLineDash([6,5]);ctx.strokeStyle=bunk;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(cx,cy);ctx.stroke();ctx.setLineDash([]);}
+  }
+  // me
+  if(p){
+    const l=loc(p),[px,py]=w2s(l.x,l.y),ar=Math.max(6,(p.acc||0)*view.s);
+    ctx.fillStyle=css("--alley");ctx.globalAlpha=.15;ctx.beginPath();ctx.arc(px,py,ar,0,6.3);ctx.fill();ctx.globalAlpha=1;
+    ctx.fillStyle=css("--alley");ctx.beginPath();ctx.arc(px,py,8,0,6.3);ctx.fill();ctx.strokeStyle="#fff";ctx.lineWidth=3;ctx.stroke();
+  }
+  // scale bar
+  const bm=steps.find(s=>s*view.s>=70)||steps[steps.length-1],bl=bm*view.s,bx=12,by=H-14;
+  ctx.strokeStyle=ink;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(bx,by-5);ctx.lineTo(bx,by);ctx.lineTo(bx+bl,by);ctx.lineTo(bx+bl,by-5);ctx.stroke();
+  ctx.font="500 11px "+getComputedStyle(document.body).fontFamily;ctx.textAlign="left";ctx.textBaseline="bottom";ctx.fillStyle=ink;ctx.lineWidth=3;ctx.strokeStyle=halo;
+  ctx.strokeText(lenLabel(bm),bx+4,by-7);ctx.fillText(lenLabel(bm),bx+4,by-7);
+  if(satShown){ctx.font="400 10px "+getComputedStyle(document.body).fontFamily;ctx.textAlign="right";ctx.textBaseline="bottom";ctx.lineWidth=3;ctx.strokeStyle=halo;ctx.fillStyle=ink;const at="Imagery © Esri, Maxar, Earthstar Geographics";ctx.strokeText(at,W-6,H-4);ctx.fillText(at,W-6,H-4);}
+  if(sim){ctx.font="500 11px "+getComputedStyle(document.body).fontFamily;ctx.textAlign="right";ctx.textBaseline="bottom";ctx.lineWidth=3;ctx.strokeStyle=halo;ctx.fillStyle=ink;ctx.strokeText("Tap map to move",W-62,H-20);ctx.fillText("Tap map to move",W-62,H-20);}
+}
+
+/* pointer: pan, pinch, tap */
+const ptrs=new Map();let tap=null,pinch=null;
+cv.addEventListener("pointerdown",e=>{cv.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.offsetX,y:e.offsetY});tap=ptrs.size===1?{x:e.offsetX,y:e.offsetY,t:Date.now(),moved:false}:null;if(ptrs.size===2)pinch=null;});
+cv.addEventListener("pointermove",e=>{
+  const p=ptrs.get(e.pointerId);if(!p)return;
+  if(ptrs.size===1){const dx=e.offsetX-p.x,dy=e.offsetY-p.y;view.cx-=dx/view.s;view.cy+=dy/view.s;follow=false;$("#followBtn").setAttribute("aria-pressed","false");if(tap&&Math.hypot(e.offsetX-tap.x,e.offsetY-tap.y)>6)tap.moved=true;}
+  p.x=e.offsetX;p.y=e.offsetY;
+  if(ptrs.size===2){
+    const[a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y),m={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+    if(pinch){const w=s2w(m.x,m.y);view.s=Math.min(60,Math.max(.05,view.s*d/pinch.d));const w2=s2w(m.x,m.y);view.cx+=w.x-w2.x;view.cy+=w.y-w2.y;}
+    pinch={d};
+  }
+  draw();
+});
+function up(e){
+  ptrs.delete(e.pointerId);pinch=null;
+  if(tap&&!tap.moved&&Date.now()-tap.t<450&&ptrs.size===0)onTap(tap.x,tap.y);
+  tap=null;
+}
+cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",e=>{ptrs.delete(e.pointerId);tap=null;});
+cv.addEventListener("wheel",e=>{e.preventDefault();const w=s2w(e.offsetX,e.offsetY);view.s=Math.min(60,Math.max(.05,view.s*(e.deltaY<0?1.15:1/1.15)));const w2=s2w(e.offsetX,e.offsetY);view.cx+=w.x-w2.x;view.cy+=w.y-w2.y;draw();},{passive:false});
+function onTap(px,py){
+  if(sim){const w=s2w(px,py);simLoc={x:w.x,y:w.y};onPos();return;}
+  let best=-1,bd=24;
+  D.L.forEach((q,i)=>{const[x0,y0]=w2s(q.b.x,q.b.y),[x1,y1]=w2s(q.e.x,q.e.y);const dx=x1-x0,dy=y1-y0,l2=dx*dx+dy*dy||1;let t=((px-x0)*dx+(py-y0)*dy)/l2;t=Math.max(0,Math.min(1,t));const d=Math.hypot(px-(x0+t*dx),py-(y0+t*dy));if(d<bd){bd=d;best=i;}});
+  sel=best;renderPens();draw();
+  if(best>=0)toast("Pen "+D.L[best].p.id+" · row "+(D.L[best].row+1));
+}
+
+/* ---------- example data ---------- */
+function loadExample(){
+  const o=SIM_ORIGIN,pens=[];
+  const G=(x,y)=>{const lat=o.lat+y/MPD,lon=o.lon+x/(MPD*Math.cos(o.lat*D2R));return{lat,lon,alt:o.alt};};
+  const rows=[{y:0,dir:1,pre:"A"},{y:-25,dir:-1,pre:"B"},{y:-145,dir:1,pre:"C"},{y:-170,dir:-1,pre:"D"}];
+  for(const r of rows){for(let k=0;k<6;k++){const x0=r.dir>0?k*32:(6-k)*32,x1=r.dir>0?(k+1)*32-1.2:(5-k)*32+1.2;
+    // consecutive pens share an endpoint within link distance
+    const bx=r.dir>0?k*32:(6-k)*32,ex=r.dir>0?(k+1)*32:(5-k)*32;
+    pens.push({id:r.pre+(k+1),b:G(bx,r.y),e:G(ex,r.y)});}}
+  state.origin={lat:o.lat,lon:o.lon,alt:o.alt};state.example=true;state.pens=pens;state.nextId="1";pending=null;sel=-1;
+  refresh();fitAll();toast("Example feedlot loaded: 24 pens, 4 rows, 2 alleys");
+}
+
+/* ---------- wiring ---------- */
+function tab(id){
+  ["cap","pens","file","gps"].forEach(k=>{const on=k===id;$("#t-"+k).setAttribute("aria-selected",on);$("#p-"+k).hidden=!on;});
+  setTimeout(resize,0);
+}
+["cap","pens","file","gps"].forEach(k=>$("#t-"+k).addEventListener("click",()=>tab(k)));
+$("#markBtn").addEventListener("click",mark);
+$("#cancelBtn").addEventListener("click",()=>{pending=null;uiCapture();draw();});
+$("#simBtn").addEventListener("click",()=>{
+  sim=!sim;$("#simBtn").setAttribute("aria-pressed",sim);
+  if(sim){if(!state.origin){state.origin={...SIM_ORIGIN};save();build();}
+    const p=fix&&!sim?loc(fix):{x:0,y:0};simLoc=D.L.length?{x:D.L[0].b.x,y:D.L[0].b.y}:p;if(follow){}
+    toast("Simulation on. Tap the map to move your position.");}
+  onPos();if(!sim&&!fix)setFix("","Waiting for GPS");
+});
+$("#fitBtn").addEventListener("click",fitAll);
+$("#followBtn").addEventListener("click",()=>{follow=!follow;$("#followBtn").setAttribute("aria-pressed",follow);const p=curPos();if(follow&&p){const l=loc(p);view.cx=l.x;view.cy=l.y;if(view.s<2)view.s=3;draw();}});
+const SET=[["sTol","tol"],["sAlley","alley"],["sDepth","depth"]];
+function showSettings(){
+  for(const [id,k] of SET)$("#"+id).value=+uLen(state.settings[k]).toFixed(1);
+  $("#sSide").value=state.settings.side;$("#sUnits").value=units;
+  $("#lTol").textContent="Link distance ("+uAbbr()+")";$("#lAlley").textContent="Max alley width ("+uAbbr()+")";$("#lDepth").textContent="Default pen depth ("+uAbbr()+")";
+}
+for(const [id,k] of SET){$("#"+id).addEventListener("change",e=>{const v=parseFloat(e.target.value),m=isImp()?v/FT:v;if(m>=0.3)state.settings[k]=m;refresh();showSettings();});}
+$("#sSide").addEventListener("change",e=>{state.settings.side=e.target.value;state.settings.sideTouched=true;refresh();});
+$("#sUnits").addEventListener("change",e=>{units=e.target.value;try{localStorage.setItem("penwalker.units",units);}catch(x){}showSettings();renderPens();onPos();draw();toast(isImp()?"Showing feet. Map files are not affected.":"Showing meters. Map files are not affected.");});
+$("#expMap").addEventListener("click",()=>saveFile(yardSlug()+"_MAP.TXT",toText().replace(/\n/g,"\r\n"),"text/plain"));
+$("#expGeo").addEventListener("click",()=>saveFile(slug()+".geojson",geojson(),"application/geo+json"));
+$("#copyMap").addEventListener("click",()=>copy(toText()));
+$("#loadText").addEventListener("click",()=>applyParsed(parseText($("#mapText").value)));
+$("#fileIn").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const pr=parseText(String(r.result));if(!pr.pens.length&&!pr.origin){toast("No ORIGIN or PEN records found");return;}if(createMap(pr.meta.yard||f.name.replace(/\.[^.]+$/,"").replace(/_MAP$/i,"")||"Imported map"))applyParsed(pr);};r.readAsText(f);e.target.value="";});
+$("#example").addEventListener("click",loadExample);
+let clr=false;
+$("#clearAll").addEventListener("click",e=>{
+  if(!clr){clr=true;e.target.textContent="Tap again to clear";setTimeout(()=>{clr=false;e.target.textContent="Clear all";},3000);return;}
+  clr=false;e.target.textContent="Clear all";state.pens=[];state.origin=fix?{lat:fix.lat,lon:fix.lon,alt:fix.alt??0.1}:null;state.nextId="1";pending=null;sel=-1;
+  $("#penId").value="1";uiCapture();refresh();toast("Cleared");
+});
+$("#penId").addEventListener("change",()=>{state.nextId=$("#penId").value.trim()||state.nextId;save();});
+window.addEventListener("resize",resize);
+if(window.ResizeObserver)new ResizeObserver(resize).observe($("#mapwrap"));
+
+/* ---------- multiple maps ---------- */
+const curName=()=>(store.maps[store.cur]&&store.maps[store.cur].name)||"Map";
+const yardSlug=()=>((state.meta&&state.meta.yard)||curName()).trim().replace(/[^A-Za-z0-9._-]+/g,"_").replace(/^_+|_+$/g,"")||"MAP";
+const slug=()=>curName().trim().replace(/[^A-Za-z0-9._-]+/g,"_").replace(/^_+|_+$/g,"")||"pens";
+function syncMapSel(){
+  const sel2=$("#mapSel");if(!sel2)return;sel2.innerHTML="";
+  for(const id of Object.keys(store.maps)){const m=store.maps[id];const o=document.createElement("option");o.value=id;o.textContent=m.name+" ("+(id===store.cur?state:m.state).pens.length+" pens)";if(id===store.cur)o.selected=true;sel2.appendChild(o);}
+}
+function syncUI(){
+  syncMapSel();$("#mapName").value=curName();for(const [id,k] of [["mYard","yard"],["mLoc","loc"],["mBy","by"],["mOn","on"]])$("#"+id).value=(state.meta&&state.meta[k])||"";$("#penId").value=state.nextId;$("#numDir").value=state.settings.dir==="down"?"down":"up";$("#numStep").value=state.settings.step||"1";chainRule();
+  showSettings();
+}
+function switchMap(id){
+  if(collecting){toast("Wait for the fix to finish");return false;}
+  save();store.cur=id;
+  state=Object.assign(blank(),store.maps[id].state);state.settings=Object.assign(blank().settings,state.settings||{});fixSettings(state);state.meta=Object.assign(blank().meta,state.meta||{});
+  pending=null;sel=-1;
+  if(!state.origin){if(sim)state.origin={...SIM_ORIGIN};else if(fix)state.origin={lat:fix.lat,lon:fix.lon,alt:fix.alt??0.1};}
+  uiCapture();refresh();syncUI();
+  simLoc=D.L.length?{x:D.L[0].b.x,y:D.L[0].b.y}:{x:0,y:0};
+  fitAll();onPos();return true;
+}
+function createMap(name,st){
+  const id=uid();const n=Object.keys(store.maps).length+1;
+  store.maps[id]={name:(name||"").trim()||("Map "+n),state:st||blank()};
+  if(!switchMap(id)){delete store.maps[id];return false;}
+  save();return true;
+}
+$("#mapSel").addEventListener("change",e=>switchMap(e.target.value));
+$("#newMapBtn").addEventListener("click",()=>{$("#mapbar").hidden=true;$("#newBar").hidden=false;$("#newName").value="";$("#newName").placeholder="Map name, e.g. North yard";$("#newName").focus();});
+function closeNew(){$("#newBar").hidden=true;$("#mapbar").hidden=false;}
+$("#newCancel").addEventListener("click",closeNew);
+function doCreate(){if(createMap($("#newName").value)){closeNew();tab("cap");toast("New map “"+curName()+"” ready. Start walking your first pen.");}}
+$("#newCreate").addEventListener("click",doCreate);
+$("#newName").addEventListener("keydown",e=>{if(e.key==="Enter")doCreate();if(e.key==="Escape")closeNew();});
+$("#mapName").addEventListener("change",e=>{const v=e.target.value.trim();if(v){store.maps[store.cur].name=v;save();syncMapSel();}else e.target.value=curName();});
+$("#dupMap").addEventListener("click",()=>{const c=JSON.parse(JSON.stringify(state));c.example=false;createMap(curName()+" copy",c);});
+let dm=false;
+$("#delMap").addEventListener("click",e=>{
+  if(!dm){dm=true;e.target.textContent="Tap again to delete";setTimeout(()=>{dm=false;e.target.textContent="Delete map";},3000);return;}
+  dm=false;e.target.textContent="Delete map";
+  delete store.maps[store.cur];store.cur=null;
+  let ids=Object.keys(store.maps);if(!ids.length){const id=uid();store.maps[id]={name:"Map 1",state:blank()};ids=[id];}
+  switchMap(ids[0]);toast("Map deleted");
+});
+
+$("#numDir").addEventListener("change",e=>{state.settings.dir=e.target.value;save();seqHint();toast(e.target.value==="down"?"Pens will count down":"Pens will count up");});
+let chainPref=true;
+function chainRule(){
+  const forced=["manual","none"].includes(state.settings.step||"1"),c=$("#chain");
+  if(forced&&!c.disabled)chainPref=c.checked;
+  c.disabled=forced;
+  c.checked=forced?false:chainPref;
+  $("#chainTxt").textContent=forced?"Chain is off: capture a start and an end point for every pen":"Chain: next pen starts where this one ends";
+}
+$("#chain").addEventListener("change",e=>{if(!e.target.disabled)chainPref=e.target.checked;});
+$("#numStep").addEventListener("change",e=>{state.settings.step=e.target.value;chainRule();
+  if(!pending){const cur=$("#penId").value.trim()||state.nextId;if(e.target.value!=="manual"&&!cur){state.nextId="1";$("#penId").value="1";}}
+  save();seqHint();toast({1:"Counting by 1",even:"Even numbers only",odd:"Odd numbers only",none:"Pen number will not change",manual:"You will enter each pen number"}[e.target.value]);});
+$("#penId").addEventListener("input",e=>{const v=e.target.value.trim();if(pending){pending.id=v;$("#markBtn").textContent="End pen "+(v||"…");}seqHint();});
+
+/* ---------- external GPS (NMEA over serial / USB / Bluetooth) ---------- */
+function gotFix(f){fix=f;if(!state.origin&&!sim){state.origin={lat:f.lat,lon:f.lon,alt:f.alt??0.1};save();build();}onPos();}
+const hasSerial=!!(navigator.serial&&navigator.serial.getPorts);
+const hasBT=!!(window.AndroidBT&&window.AndroidBT.list);
+let gp={src:(window.DesktopApp&&hasSerial)?"ext":"dev",baud:0,last:0,auto:true};
+try{const t=localStorage.getItem("penwalker.gps");if(t)Object.assign(gp,JSON.parse(t));}catch(e){}
+if(!hasSerial&&gp.src==="ext")gp.src="dev";
+if(!hasBT&&gp.src==="bt")gp.src="dev";
+const saveGp=()=>{try{localStorage.setItem("penwalker.gps",JSON.stringify(gp));}catch(e){}};
+const ext={port:null,label:"",baud:0,last:"",lastT:0,gst:null,gstT:0,off:false};
+let scanning=false,scanTimer=null,glogLines=[];
+function glog(m){const d=new Date(),t=[d.getHours(),d.getMinutes(),d.getSeconds()].map(x=>String(x).padStart(2,"0")).join(":");glogLines.push(t+"  "+m);glogLines=glogLines.slice(-30);const el=$("#gpsLog");el.textContent=glogLines.join("\n");el.scrollTop=el.scrollHeight;}
+function gstat(m,cls){$("#gpsStat").textContent=m;if(cls&&(gp.src==="ext"||gp.src==="bt")&&!(ext.port&&fix&&fix.src==="ext"))setFix(cls,m);}
+const VENDORS={0x1546:"u-blox",0x067b:"Prolific",0x0403:"FTDI",0x10c4:"Silicon Labs",0x1a86:"CH340",0x091e:"Garmin",0x1fc9:"NXP",0x2341:"Arduino",0x0483:"STMicro"};
+function portLabel(port,i){let inf={};try{inf=port.getInfo()||{};}catch(e){}
+  if(inf.usbVendorId)return "Port "+(i+1)+" ("+(VENDORS[inf.usbVendorId]||("USB "+inf.usbVendorId.toString(16)))+")";
+  return "Port "+(i+1)+" (COM or Bluetooth)";}
+function nmeaOK(l){const m=l.match(/^\$([^*]+)\*([0-9A-Fa-f]{2})$/);if(!m)return null;let c=0;for(const ch of m[1])c^=ch.charCodeAt(0);return c===parseInt(m[2],16)?m[1].split(","):null;}
+function nmeaCoord(v,h){if(!v)return NaN;const dot=v.indexOf(".");if(dot<3)return NaN;const r=+v.slice(0,dot-2)+(+v.slice(dot-2))/60;return(h==="S"||h==="W")?-r:r;}
+const QN={1:"GPS",2:"DGPS",4:"RTK fixed",5:"RTK float",6:"Est"};
+function onNmea(f){
+  const t=f[0].slice(2);
+  if(t==="GGA"){
+    const q=+f[6];if(!q)return;
+    const lat=nmeaCoord(f[2],f[3]),lon=nmeaCoord(f[4],f[5]);if(!isFinite(lat)||!isFinite(lon))return;
+    const hd=+f[8]||1,fresh=ext.gst!=null&&Date.now()-ext.gstT<3000;
+    const acc=fresh?ext.gst:q===4?0.03:q===5?0.5:Math.max(1,hd*(q===2?3:5));
+    gotFix({lat,lon,alt:f[9]!==""&&isFinite(+f[9])?+f[9]:null,acc,t:Date.now(),src:"ext",sats:+f[7]||0,qn:QN[q]||"",q});
+  }else if(t==="GST"){const a=+f[6],b=+f[7];if(isFinite(a)&&isFinite(b)&&f[6]!==""){ext.gst=Math.hypot(a,b);ext.gstT=Date.now();}}
+}
+async function probe(port,baud,ms){
+  try{await port.open({baudRate:baud});}catch(e){return "busy";}
+  let ok=false;const rd=port.readable.getReader(),dec=new TextDecoder();let buf="";
+  const timer=setTimeout(()=>{rd.cancel().catch(()=>{});},ms);
+  try{for(;;){const{value,done}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});if(buf.length>4000)buf=buf.slice(-2000);
+    if(/\$[A-Z]{2}(GGA|RMC|GSA|GSV|GLL|VTG|GST|ZDA),[^\r\n]*\*[0-9A-Fa-f]{2}/.test(buf)){ok=true;break;}}}catch(e){}
+  clearTimeout(timer);try{rd.releaseLock();}catch(e){}
+  if(!ok){try{await port.close();}catch(e){}}
+  return ok?"ok":"silent";
+}
+async function runPort(port,label,baud){
+  ext.port=port;ext.label=label;ext.baud=baud;ext.lastT=Date.now();gp.last=baud;saveGp();
+  glog("Connected: "+label+" at "+baud+" baud");if(canCom)refreshCom();gstat("Connected to "+label+" at "+baud+" baud. Waiting for a position fix…","ok");
+  const dec=new TextDecoder();let buf="";
+  try{
+    while(port.readable&&ext.port===port){
+      const rd=port.readable.getReader();ext.reader=rd;
+      try{for(;;){const{value,done}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});
+        let i;while((i=buf.indexOf("\n"))>=0){const line=buf.slice(0,i).trim();buf=buf.slice(i+1);
+          if(line[0]==="$"){ext.last=line;ext.lastT=Date.now();const f=nmeaOK(line);if(f)onNmea(f);}}
+        if(buf.length>2000)buf=buf.slice(-500);}}
+      catch(e){}finally{try{rd.releaseLock();}catch(e){}}
+      break;
+    }
+  }catch(e){}
+  if(ext.port===port){ext.port=null;try{await port.close();}catch(e){}glog("Receiver disconnected");gstat(gp.auto?"Receiver disconnected. Looking again…":"Receiver disconnected. Tap Scan for receiver.","bad");scheduleScan(4000);}
+}
+function baudList(){if(+gp.baud)return[+gp.baud];return[...new Set([gp.last||0,9600,4800,38400,115200,57600])].filter(Boolean);}
+async function tryPort(port,label){
+  for(const b of baudList()){
+    gstat("Trying "+label+" at "+b+" baud…","ok");
+    const r=await probe(port,b,b===baudList()[0]?2500:1800);
+    if(r==="ok"){runPort(port,label,b);return true;}
+    if(r==="busy"){glog(label+": cannot open (in use by another program?)");return false;}
+  }
+  glog(label+": opened but no GPS data");return false;
+}
+async function scan(manual){
+  if(!manual&&!gp.auto)return;
+  if(scanning||ext.port||gp.src!=="ext"||!hasSerial||ext.off)return;
+  scanning=true;
+  try{
+    let ports=await navigator.serial.getPorts();
+    if(gp.pref){const m=x=>{try{const i=x.getInfo();return i&&i.usbVendorId===gp.pref.vid&&i.usbProductId===gp.pref.pid;}catch(e){return false;}};ports=[...ports.filter(m),...ports.filter(x=>!m(x))];}
+    if(!ports.length){glog("No serial ports available");gstat(window.DesktopApp?"No serial ports found. Plug in the GPS receiver. The app keeps looking.":"No permitted ports yet. Tap Choose port… to pick your receiver.","bad");}
+    for(let i=0;i<ports.length&&!ext.port;i++){if(await tryPort(ports[i],portLabel(ports[i],i)))break;}
+    if(!ext.port&&ports.length)gstat("No GPS receiver found on "+ports.length+" port"+(ports.length>1?"s":"")+". Check it is powered and has a view of the sky. Still looking.","bad");
+  }catch(e){glog("Scan error: "+(e&&e.message||e));gstat("Serial access is not available here.","bad");}
+  scanning=false;if(!ext.port)scheduleScan(10000);
+}
+function scheduleScan(ms){clearTimeout(scanTimer);if(gp.auto&&gp.src==="ext"&&hasSerial&&!ext.off)scanTimer=setTimeout(scan,ms||10000);}
+async function disconnect(){if(ext.bt){try{window.AndroidBT.disconnect();}catch(e){}ext.bt=false;}const p=ext.port;ext.port=null;try{ext.reader&&await ext.reader.cancel();}catch(e){}try{p&&await p.close();}catch(e){}}
+async function pickPort(){
+  try{
+    ext.off=false;const port=await navigator.serial.requestPort();
+    await disconnect();scanning=true;
+    const ok=await tryPort(port,"Chosen port");scanning=false;
+    if(!ok)gstat("No GPS data from that port. Check the baud rate setting and that the receiver is on.","bad");
+  }catch(e){scanning=false;if(e&&e.name==="NotFoundError")glog("No port chosen");else{glog("Could not open port chooser: "+(e&&e.message||e));gstat("Serial access is blocked in this page.","bad");}}
+}
+function applySource(){
+  const useExt=gp.src==="ext"&&hasSerial,useBt=gp.src==="bt"&&hasBT;
+  if(ext.bt&&!useBt)disconnect();
+  if(useBt&&ext.port&&!ext.bt)disconnect();
+  $("#gpsSrc").value=useExt?"ext":useBt?"bt":"dev";
+  $("#gpsExtBox").style.display=useExt?"flex":"none";$("#btBox").hidden=!useBt;$("#gpsAutoRow").hidden=!(useExt||useBt);
+  $("#gpsBaud").value=String(gp.baud||0);$("#gpsAuto").checked=!!gp.auto;
+  if(!hasSerial)$("#gpsSrc").querySelector('option[value="ext"]').disabled=true;
+  if(!hasBT)$("#gpsSrc").querySelector('option[value="bt"]').disabled=true;
+  if(!hasSerial&&!hasBT)$("#gpsNote").textContent="This browser cannot talk to external receivers. Use the Windows app, the Android app, or desktop Chrome or Edge.";
+  if(useExt||useBt){
+    if(watchId!=null){try{navigator.geolocation.clearWatch(watchId);}catch(e){}watchId=null;}
+    if(fix&&fix.src!=="ext")fix=null;
+  }
+  if(useExt){
+    if(gp.auto){setFix("","Looking for GPS receiver…");gstat("Looking for a GPS receiver…");scan();}
+    else{setFix("","GPS search is off. Open the GPS tab and tap Scan for receiver.");gstat("Automatic search is off. Tap Scan for receiver, or connect to a port below.");}
+  }else if(useBt){
+    refreshBt();
+    if(gp.auto&&gp.btLast&&!ext.bt){setFix("","Connecting to "+gp.btLast.name+"…");btConnect(gp.btLast.addr,gp.btLast.name);}
+    else if(!ext.bt){setFix("","Bluetooth receiver not connected. Open the GPS tab.");gstat("Choose your receiver below, then tap Connect.");}
+  }else{
+    ext.off=true;disconnect();gstat("Using this device's own location");startGPS();
+  }
+}
+$("#gpsSrc").addEventListener("change",e=>{gp.src=e.target.value;ext.off=false;saveGp();applySource();});
+$("#gpsBaud").addEventListener("change",e=>{gp.baud=+e.target.value;saveGp();});
+$("#gpsScan").addEventListener("click",async()=>{ext.off=false;await disconnect();glog("Scanning…");scan(true);});
+$("#gpsAuto").addEventListener("change",e=>{gp.auto=e.target.checked;saveGp();clearTimeout(scanTimer);
+  if(gp.auto){ext.off=false;glog("Automatic search on");if(gp.src==="bt"){if(gp.btLast&&!ext.bt)btConnect(gp.btLast.addr,gp.btLast.name);}else scan();}
+  else{glog("Automatic search off");if(!ext.port)gstat("Automatic search is off. Tap Scan for receiver, or connect to a port below.");}});
+$("#gpsPick").addEventListener("click",pickPort);
+$("#gpsOff").addEventListener("click",async()=>{ext.off=true;await disconnect();glog("Disconnected by you");gstat("Disconnected","");setFix("","GPS disconnected");});
+/* ---------- Bluetooth receiver (Android app) ---------- */
+function btConnect(addr,name){
+  gp.btLast={addr,name};saveGp();ext.off=false;ext.bt=true;
+  gstat("Connecting to "+name+"…","ok");glog("Connecting to "+name);
+  try{window.AndroidBT.connect(addr);}catch(e){ext.bt=false;gstat("Bluetooth is not available.","bad");}
+}
+window.__btLine=function(line){ext.last=line;ext.lastT=Date.now();const f=nmeaOK(line);if(f)onNmea(f);};
+window.__btStatus=function(st,msg){
+  if(st==="connected"){
+    ext.port={close(){}};ext.bt=true;ext.label=(gp.btLast&&gp.btLast.name)||"Bluetooth receiver";ext.baud=0;ext.lastT=Date.now();
+    glog("Bluetooth connected: "+ext.label);gstat("Connected to "+ext.label+". Waiting for a position fix…","ok");
+  }else if(st==="connecting"){glog(msg);gstat(msg,"ok");}
+  else{ext.port=null;glog(msg);gstat(msg,"bad");}
+  refreshBt();
+};
+window.__btPerm=function(ok){
+  glog(ok?"Bluetooth access allowed":"Bluetooth access denied");refreshBt();
+  if(ok&&gp.src==="bt"&&gp.auto&&gp.btLast&&!ext.bt)btConnect(gp.btLast.addr,gp.btLast.name);
+};
+function refreshBt(){
+  if(!hasBT)return;
+  let o={};try{o=JSON.parse(window.AndroidBT.list());}catch(e){}
+  const box=$("#btList");box.innerHTML="";box.className="note";
+  if(!o.perm){
+    box.textContent="Allow Bluetooth access so the app can see your paired receivers. ";
+    const b=document.createElement("button");b.className="btn";b.textContent="Allow Bluetooth";b.addEventListener("click",()=>window.AndroidBT.requestPermission());box.appendChild(b);return;
+  }
+  if(!o.enabled){box.textContent="Bluetooth is turned off. Turn it on, then tap Refresh list.";return;}
+  const devs=(o.devices||[]).slice().sort((a,b)=>(/top|gnss|gps|608/i.test(b.name)?1:0)-(/top|gnss|gps|608/i.test(a.name)?1:0));
+  if(!devs.length){box.textContent="No paired devices. Pair the receiver in Android Bluetooth settings, then tap Refresh list.";return;}
+  box.className="";
+  for(const d of devs){
+    const on=ext.port&&ext.bt&&gp.btLast&&gp.btLast.addr===d.address;
+    const row=document.createElement("div");row.className="com"+(on?" on":"");
+    const sp=document.createElement("span");sp.textContent=d.name+"  "+d.address+(on?"  (connected)":"");
+    const b=document.createElement("button");b.textContent=on?"Reconnect":"Connect";b.addEventListener("click",()=>btConnect(d.address,d.name));
+    row.append(sp,b);box.appendChild(row);
+  }
+}
+if(hasBT){
+  $("#btRefresh").addEventListener("click",refreshBt);
+  $("#btSettings").addEventListener("click",()=>window.AndroidBT.openSettings());
+  $("#btOff").addEventListener("click",async()=>{await disconnect();glog("Disconnected by you");gstat("Disconnected","");setFix("","GPS disconnected");refreshBt();});
+  $("#t-gps").addEventListener("click",refreshBt);
+}
+
+/* ---------- choose a specific COM port (Windows app) ---------- */
+const canCom=!!(window.DesktopApp&&window.DesktopApp.listPorts&&hasSerial);
+async function refreshCom(){
+  if(!canCom)return;$("#comBox").hidden=false;
+  let list=[];try{list=await window.DesktopApp.listPorts();}catch(e){}
+  const box=$("#comList");box.innerHTML="";
+  if(!list.length){box.textContent="No COM ports found. Plug in the receiver or pair its Bluetooth port, then tap Refresh list.";return;}
+  box.className="";
+  for(const it of list){
+    const d=document.createElement("div");d.className="com"+(ext.port&&ext.com===it.name?" on":"");
+    const sp=document.createElement("span");sp.textContent=it.label+(ext.port&&ext.com===it.name?"  (connected)":"");
+    const b=document.createElement("button");b.textContent="Connect";b.addEventListener("click",()=>useCom(it.name));
+    d.append(sp,b);box.appendChild(d);
+  }
+}
+async function useCom(raw){
+  const name=String(raw||"").trim().toUpperCase().replace(/^COM\s*/,"COM");
+  if(!/^COM\d+$/.test(name)){toast("Enter a port like COM5");return;}
+  ext.off=false;await disconnect();clearTimeout(scanTimer);
+  gstat("Opening "+name+"…","ok");glog("Opening "+name);
+  try{
+    await window.DesktopApp.wantPort(name);
+    const port=await navigator.serial.requestPort();
+    scanning=true;ext.com=name;
+    const ok=await tryPort(port,name);scanning=false;
+    if(ok){try{const i=port.getInfo();if(i&&i.usbVendorId){gp.pref={vid:i.usbVendorId,pid:i.usbProductId};saveGp();}}catch(e){}}
+    else gstat("No GPS data from "+name+". Check the baud rate, that the receiver is on, and that no other program is using the port.","bad");
+  }catch(e){scanning=false;glog(name+": "+(e&&e.message||e));gstat("Could not open "+name+". Check it is listed in Device Manager and not in use.","bad");}
+  refreshCom();
+}
+if(canCom){
+  $("#comUse").addEventListener("click",()=>useCom($("#comType").value));
+  $("#comType").addEventListener("keydown",e=>{if(e.key==="Enter")useCom(e.target.value);});
+  $("#comRefresh").addEventListener("click",refreshCom);
+  $("#t-gps").addEventListener("click",refreshCom);
+}
+if(hasSerial){try{navigator.serial.addEventListener("connect",()=>{glog("Device plugged in");scan();});navigator.serial.addEventListener("disconnect",()=>glog("Device unplugged"));}catch(e){}}
+setInterval(()=>{if(ext.port&&Date.now()-ext.lastT>6000){gstat("Receiver connected but silent for 6 s","bad");}
+  else if(ext.port&&ext.last&&fix&&fix.src==="ext"){const lt=$("#gpsStat");lt.textContent=ext.label+" · "+(ext.bt?"Bluetooth":ext.baud+" baud")+" · "+(fix.qn||"fix")+" · "+(fix.sats||0)+" satellites · "+fAcc(fix.acc)+"\n"+ext.last.slice(0,70);}
+  else if(ext.port&&ext.last){$("#gpsStat").textContent=ext.label+" · "+(ext.bt?"Bluetooth":ext.baud+" baud")+" · receiving, but no position fix yet. Move outdoors.\n"+ext.last.slice(0,70);}},1000);
+
+for(const [id,k] of [["mYard","yard"],["mLoc","loc"],["mBy","by"],["mOn","on"]]){
+  $("#"+id).addEventListener("change",e=>{state.meta[k]=e.target.value.trim();if(k==="by"){lastBy=state.meta.by;try{localStorage.setItem("penwalker.by",lastBy);}catch(x){}}save();$("#mapText").value=toText();});
+}
+$("#recalc").addEventListener("click",()=>{state.pens.forEach(p=>{delete p.corners;});refresh();toast("Perimeters recalculated from bunk lines");});
+/* ---------- satellite imagery (Esri World Imagery tiles) ---------- */
+let sat=true;try{const v=localStorage.getItem("penwalker.sat");if(v!==null)sat=v==="1";}catch(e){}
+const tiles=new Map();let tileErr=0,tileOk=0,tileWarned=false;
+function lonLatToTile(lat,lon,z){const n=2**z,r=lat*D2R;return{x:(lon+180)/360*n,y:(1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n};}
+function tileToLonLat(x,y,z){const n=2**z;return{lon:x/n*360-180,lat:Math.atan(Math.sinh(Math.PI*(1-2*y/n)))/D2R};}
+function getTile(z,x,y){
+  const k=z+"/"+x+"/"+y;let t=tiles.get(k);if(t)return t;
+  t={img:new Image(),ok:false};
+  t.img.onload=()=>{t.ok=true;tileOk++;draw();};
+  t.img.onerror=()=>{tileErr++;if(!tileWarned&&tileErr>=4&&tileOk===0){tileWarned=true;toast("Satellite imagery could not load. It needs an internet connection.");}};
+  t.img.src="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/"+z+"/"+y+"/"+x;
+  tiles.set(k,t);
+  if(tiles.size>400){const first=tiles.keys().next().value;tiles.delete(first);}
+  return t;
+}
+function drawSat(){
+  if(!sat||!W)return false;
+  const o=O();
+  const z=Math.max(1,Math.min(18,Math.round(Math.log2(156543.03*Math.cos(o.lat*D2R)*view.s)+0.3)));
+  const tl=s2w(0,0),br=s2w(W,H),g1=geo(tl.x,tl.y),g2=geo(br.x,br.y);
+  const t1=lonLatToTile(g1.lat,g1.lon,z),t2=lonLatToTile(g2.lat,g2.lon,z);
+  const x0=Math.floor(t1.x),x1=Math.floor(t2.x),y0=Math.floor(t1.y),y1=Math.floor(t2.y);
+  if(!isFinite(x0+x1+y0+y1)||(x1-x0+1)*(y1-y0+1)>90)return false;
+  const n=2**z;let drew=false;
+  for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){
+    if(y<0||y>=n)continue;
+    const t=getTile(z,((x%n)+n)%n,y);if(!t.ok)continue;
+    const a=tileToLonLat(x,y,z),b=tileToLonLat(x+1,y+1,z),la=loc(a),lb=loc(b);
+    const[ax,ay]=w2s(la.x,la.y),[bx,by]=w2s(lb.x,lb.y);
+    ctx.drawImage(t.img,ax,ay,bx-ax+0.6,by-ay+0.6);drew=true;
+  }
+  return drew;
+}
+$("#satBtn").setAttribute("aria-pressed",String(sat));
+$("#satBtn").addEventListener("click",()=>{sat=!sat;$("#satBtn").setAttribute("aria-pressed",String(sat));try{localStorage.setItem("penwalker.sat",sat?"1":"0");}catch(e){}tileWarned=false;tileErr=0;draw();});
+
+/* ---------- KML export for Google Earth ---------- */
+const xe=v=>String(v).replace(/[<>&"']/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&apos;"}[c]));
+function kmlText(){
+  const m=state.meta||{},yard=m.yard||curName();
+  const hexes=["2f8f5b","3a74c2","a55fb8","c47a1c","1d9aa6","b8506a"];
+  const kc=(h,a)=>a+h.slice(4,6)+h.slice(2,4)+h.slice(0,2);
+  const pt=(g,alt)=>g.lon.toFixed(8)+","+g.lat.toFixed(8)+","+(alt||0).toFixed(1);
+  let o='<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n<name>'+xe(yard+" pens")+'</name>\n';
+  o+='<description>'+xe("Feedyard "+yard+(m.loc?", "+m.loc:"")+(m.by?" · Mapped by "+m.by:"")+(m.on?" on "+m.on:""))+'</description>\n';
+  o+='<Style id="bunk"><LineStyle><color>ff00a5ff</color><width>4</width></LineStyle></Style>\n';
+  hexes.forEach((h,i)=>{o+='<Style id="r'+i+'"><LineStyle><color>'+kc(h,"ff")+'</color><width>2</width></LineStyle><PolyStyle><color>'+kc(h,"55")+'</color></PolyStyle></Style>\n';});
+  const rows=new Map();
+  D.L.forEach((q,i)=>{const p=state.pens[i];if(!p)return;(rows.get(q.row)||rows.set(q.row,[]).get(q.row)).push([q,p]);});
+  for(const [r,list] of rows){
+    o+='<Folder><name>Row '+(r+1)+'</name>\n';
+    for(const [q,p] of list){
+      let c1,c2;
+      if(p.corners){c1=p.corners[0];c2=p.corners[1];}
+      else if(q.d){c1=geo(q.d.poly[2].x,q.d.poly[2].y);c2=geo(q.d.poly[3].x,q.d.poly[3].y);}
+      else{c1=p.e;c2=p.b;}
+      const alt=p.b.alt;
+      o+='<Placemark><name>'+xe("Pen "+p.id)+'</name><description>'+xe("Row "+(r+1)+", bunk "+fLen(dist(q.b,q.e),1))+'</description><styleUrl>#r'+(r%6)+'</styleUrl><Polygon><tessellate>1</tessellate><outerBoundaryIs><LinearRing><coordinates>'
+        +[p.b,p.e,c1,c2,p.b].map(g=>pt(g,alt)).join(" ")+'</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>\n';
+      o+='<Placemark><name>'+xe("Bunk "+p.id)+'</name><styleUrl>#bunk</styleUrl><LineString><tessellate>1</tessellate><coordinates>'+pt(p.b,alt)+" "+pt(p.e,alt)+'</coordinates></LineString></Placemark>\n';
+    }
+    o+='</Folder>\n';
+  }
+  return o+'</Document>\n</kml>\n';
+}
+$("#expKml").addEventListener("click",()=>saveFile(yardSlug()+"_MAP.kml",kmlText(),"application/vnd.google-earth.kml+xml"));
+
+/* ---------- start ---------- */
+if(!restore()){const id=uid();store.cur=id;store.maps[id]={name:"Example feedlot",state};loadExample();}
+else{refresh();}
+syncUI();
+uiCapture();resize();fitAll();applySource();
+})();
+</script>
+<script>if("serviceWorker" in navigator&&location.protocol==="https:"&&!window.AndroidBridge){navigator.serviceWorker.register("sw.js").catch(function(){});}</script></body></html>
